@@ -1,0 +1,311 @@
+##***********************************************
+## Makefile 
+##***********************************************
+
+## to use the latest software: add the following lines to your .bashrc or .bacsh_profile:
+##  alias gfortran='/usr/local/gcc/4.4.3/bin/gfortran'
+##  export INTEL_LICENSE_FILE=28518@intel.license.scorec.rpi.edu
+##  source /usr/local/intel/11.1/069/bin/iccvars.sh intel64
+##  source /usr/local/intel/11.1/069/bin/ifortvars.sh intel64
+
+
+## note: on avatar, to get libguide.* for the Intel MKL library:
+##  export LD_LIBRARY_PATH=/usr/local/intel/compiler91/lib:$LD_LIBRARY_PATH
+## note: on avatar, to use the Basel's pardiso library (assuming that you have downloaded it...)
+##  export LD_LIBRARY_PATH=/users/jfdord/NLACE/Exe:$LD_LIBRARY_PATH
+
+## note: on Darwin systems, before compiling, type
+##  export DYLD_LIBRARY_PATH=/opt/local/lib/gcc44:$DYLD_LIBRARY_PATH to get the right libgomp.* (not so good)
+
+CC = gcc
+
+#### compile with Intel fortran compiler
+##FC = ifort
+#### compile with gnu compiler
+FC = gfortran
+#### compile with PGI compilers
+##FC = pgf95
+##FC = pgfortran
+
+#### Optimization option: debug
+##OPT = -O0 -g
+#### Optimization option (note: -O3 does not make a difference on 2010-02-18)
+OPT = -O2
+#### Optimization for PGI compilers
+##OPT = -fast
+#### note for gfortran: option -march=opteron -mtune=opteron tend to slightly decrease the performance on avatar
+#### note for gfortran: option -ffast-math is incompatible with openmp
+
+PARDISOLIB = MKL
+##PARDISOLIB = BASEL
+
+
+#### Error or warning message
+MESSAGE = 
+
+#### choose the flags depending on the compiler
+ifeq ($(FC),ifort)
+## choose this one if no openmp is used
+##FFLAGS   = -i_dynamic  -w -I/opt/intel/mkl80/include 
+FFLAGS = -i_dynamic -openmp
+FFLAGS = -openmp
+#FFLAGS = 
+else
+  ifeq ($(FC),gfortran)
+    FFLAGS = -fopenmp
+  else
+    ifeq ($(FC),pgfortran)
+       FFLAGS = -mp
+       FFLAGS = 
+    else
+      MESSAGE = "Unrecognized compiler ... FFLAGS is not setup"
+    endif
+  endif
+endif
+
+#### recognize the OS to use the proper libraries and their paths
+OSUPPER = $(shell uname -s 2>/dev/null | tr [:lower:] [:upper:])
+COMMENT = "Compiling on a ${OSUPPER} system"
+
+ifeq (${OSUPPER},LINUX)
+  #### BLAS, LAPACK and PTHREAD libraries
+  LBLAS = /usr/lib64
+  ifeq (${PARDISOLIB},MKL)
+    #### On SCOREC systems, for pardiso from MKL library (version 8.0 and ifort9.0 or ifort9.1)
+    #INCLUDE = /opt/intel/mkl/include
+    #LIBMKL = /opt/intel/mkl/lib/intel64
+#    INCLUDE = /usr/local/intel/mkl80/include
+#    LIBMKL = /usr/local/intel/mkl80/lib/em64t
+    #### Series of libraries (lguide is required for the intel MKL pardiso)
+    LIBRARIES =  -lmkl_solver -llapack -lblas -lguide -lpthread
+    #### Message (if any)
+    ##MESSAGE = 
+    #INCLUDE = /opt/intel/composerxe-2011.4.191/mkl/include
+    #LIBMKL = /opt/intel/composerxe-2011.4.191/mkl/lib/intel64
+    INCLUDE = /usr/local/intel/11.1/069/mkl/include
+    LIBMKL = /usr/local/intel/11.1/069/mkl/lib/em64t/
+    LIBINTEL = /usr/local/intel/11.1/069/lib/intel64
+    LIBRARIES = -lmkl_solver_lp64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm
+  else
+  ifeq (${PARDISOLIB},BASEL)
+    #### On SCOREC systems, for pardiso from Basel University
+    INCLUDE = /
+    LIBMKL = /media/InternalONE/home/tseidl/NLACE/Exe
+    #### Series of libraries
+    LIBRARIES = -llapack -lblas -lpthread -lm -lpardiso412-GNU450-X86-64
+    #### Message (if any)
+    ##MESSAGE = 
+  else
+    MESSAGE = "LINUX COMPILER ok, PARDISOLIB pb"
+  endif
+  endif
+  ifeq (${FC},gfortran)
+    PATHFC = 
+#    PATHFC = /usr/local/gcc/4.4.3/bin/
+  else
+    PATHFC = 
+  endif
+else
+ifeq (${OSUPPER},DARWIN)
+  #### On jfdord's laptop, using pardiso from Basel University
+  INCLUDE = /
+  LIBMKL = /opt/local/lib/gcc44
+  #### BLAS, LAPACK, M and PTHREAD libraries
+  LBLAS = /usr/lib
+  #### Series of libraries (warning: the order of the libraries matters!)
+  LIBRARIES = -lgfortran -llapack -lblas -lpthread -lm -lpardiso400_GNU_MACOSX32_P
+  #### Message (if any)
+  ##MESSAGE = 
+  ifeq (${FC},gfortran)
+    PATHFC = /opt/local/bin/
+  else
+    ifeq (${FC},pgfortran)
+      PATHFC = /opt/pgi/osx86/10.3/bin/
+    endif
+  endif
+else
+  MESSAGE = "Unrecognized OS ..."
+endif
+endif
+
+## removed from the list of files for the compilation on Navier JFD
+##	  fgmresilu0solve.o fgmresilutsolve.o \
+
+nlace: macom.o lmain.o ldata.o inicsr.o \
+          memory.o shap.o util.o result.o \
+	elmlib.o \
+	  elem66.o elem77.o \
+          elem31.o elem32.o \
+          elem37.o \
+	  elem606.o elem607.o elem608.o elem611.o elem505.o elem707.o \
+          elem305.o elem306.o elem307.o elem618.o elem309.o\
+	solv.o \
+          pardisosolve.o \
+          fgmresilu0solve.o \
+          fgmresilutsolve.o \
+        drivers.o \
+	  routines_bfgs.o \
+	  asa_cg.o driverASA_CG.o driverNLACEcalls.o \
+	  algencanForNLACE.o algencan.o gencan.o vevalus.o lss.o scl.o \
+	    fparam.o sevalus.o auglag.o evalal.o spgls.o calc.o betra.o \
+	    newtd.o tnls.o cgm.o checkder.o setpoint.o tevalus.o \
+	    newtonkkt.o happrox.o backtrack.o moresor.o dogleg.o \
+	    extrap.o drand.o uevalus.o\
+	meshQuality.o
+	echo ${MESSAGE}
+	echo ${COMMENT}
+	${PATHFC}${FC} ${OPT} ${FFLAGS} -I${INCLUDE} -o nlace.exe \
+           macom.o lmain.o ldata.o inicsr.o \
+            memory.o shap.o util.o result.o \
+	   elmlib.o \
+	    elem66.o elem77.o \
+            elem31.o elem32.o \
+            elem37.o \
+	    elem606.o elem607.o elem608.o elem611.o elem505.o elem707.o \
+            elem305.o elem306.o elem307.o elem618.o elem309.o\
+	   solv.o \
+            pardisosolve.o \
+            fgmresilu0solve.o \
+            fgmresilutsolve.o \
+           drivers.o \
+	    routines_bfgs.o \
+	    asa_cg.o driverASA_CG.o driverNLACEcalls.o \
+	    algencanForNLACE.o algencan.o gencan.o vevalus.o lss.o scl.o \
+	     fparam.o sevalus.o auglag.o evalal.o spgls.o calc.o betra.o \
+	     newtd.o tnls.o cgm.o checkder.o setpoint.o tevalus.o \
+	     newtonkkt.o happrox.o backtrack.o moresor.o dogleg.o \
+	     extrap.o drand.o uevalus.o \
+	   meshQuality.o \
+          -L${LIBMKL} -L${LIBINTEL}\
+          -L${LBLAS} ${LIBRARIES}
+
+clean:
+	rm -f *.o *.exe fort.* *~ *.mod
+#
+#... Compile source files into object files
+#
+macom.o: macom.f  
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} macom.f
+lmain.o: macom.f ../Source/lmain.f 
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/lmain.f
+ldata.o: ../Source/ldata.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/ldata.f
+inicsr.o: ../Source/inicsr.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/inicsr.f
+memory.o: ../Source/memory.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/memory.f
+shap.o: ../Source/shap.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/shap.f
+util.o: ../Source/util.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/util.f
+result.o: ../Source/result.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/result.f
+solv.o:	../Source/solv.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/solv.f
+pardisosolve.o: ../Source/pardisosolve.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -I${INCLUDE} ../Source/pardisosolve.f
+fgmresilu0solve.o: ../Source/fgmresilu0solve.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -I${INCLUDE} ../Source/fgmresilu0solve.f
+fgmresilutsolve.o: ../Source/fgmresilutsolve.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -I${INCLUDE} ../Source/fgmresilutsolve.f
+elmlib.o: ../Source/elmlib.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/elmlib.f
+elem66.o: ../Elibrary/elem66.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem66.f	
+elem77.o: ../Elibrary/elem77.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem77.f
+elem31.o: ../Elibrary/elem31.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem31.f
+elem32.o: ../Elibrary/elem32.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem32.f
+elem37.o: ../Elibrary/elem37.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem37.f
+elem505.o: ../Elibrary/elem505.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem505.f
+elem606.o: ../Elibrary/elem606.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem606.f
+elem611.o: ../Elibrary/elem611.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem611.f
+elem607.o: ../Elibrary/elem607.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem607.f
+elem608.o: ../Elibrary/elem608.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem608.f
+elem707.o: ../Elibrary/elem707.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem707.f
+elem305.o: ../Elibrary/elem305.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem305.f
+elem306.o: ../Elibrary/elem306.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem306.f
+elem307.o: ../Elibrary/elem307.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem307.f	
+elem618.o: ../Elibrary/elem618.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem618.f	
+elem309.o: ../Elibrary/elem309.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Elibrary/elem309.f
+drivers.o: ../Source/drivers.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/drivers.f
+routines_bfgs.o: ../Source/routines_bfgs.f macom.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/routines_bfgs.f
+asa_cg.o: ../Source/routines_ASA_CG-1.3/asa_cg.c
+	$(CC) -c -lm ${OPT} ../Source/routines_ASA_CG-1.3/asa_cg.c
+driverASA_CG.o: ../Source/routines_ASA_CG-1.3/driverASA_CG.c
+	$(CC) -c -lm ${OPT} ../Source/routines_ASA_CG-1.3/driverASA_CG.c
+driverNLACEcalls.o: ../Source/routines_ASA_CG-1.3/driverNLACEcalls.c
+	$(CC) -c -lm ${OPT} ../Source/routines_ASA_CG-1.3/driverNLACEcalls.c
+algencanForNLACE.o: ../Source/routines_algencan-2.3.5/sources/problems/algencanForNLACE.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/problems/algencanForNLACE.f
+algencan.o: ../Source/routines_algencan-2.3.5/sources/algencan/algencan.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/algencan.f
+gencan.o: ../Source/routines_algencan-2.3.5/sources/algencan/gencan.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/gencan.f
+vevalus.o: ../Source/routines_algencan-2.3.5/sources/algencan/vevalus.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/vevalus.f
+lss.o: ../Source/routines_algencan-2.3.5/sources/algencan/lss.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/routines_algencan-2.3.5/sources/algencan/lss.f
+scl.o: ../Source/routines_algencan-2.3.5/sources/algencan/scl.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/routines_algencan-2.3.5/sources/algencan/scl.f
+fparam.o: ../Source/routines_algencan-2.3.5/sources/algencan/fparam.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/fparam.f
+sevalus.o: ../Source/routines_algencan-2.3.5/sources/algencan/sevalus.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/sevalus.f
+auglag.o: ../Source/routines_algencan-2.3.5/sources/algencan/auglag.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/auglag.f
+evalal.o: ../Source/routines_algencan-2.3.5/sources/algencan/evalal.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/evalal.f
+spgls.o: ../Source/routines_algencan-2.3.5/sources/algencan/spgls.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/spgls.f
+calc.o: ../Source/routines_algencan-2.3.5/sources/algencan/calc.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/calc.f
+betra.o: ../Source/routines_algencan-2.3.5/sources/algencan/betra.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/betra.f
+newtd.o: ../Source/routines_algencan-2.3.5/sources/algencan/newtd.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/newtd.f
+tnls.o: ../Source/routines_algencan-2.3.5/sources/algencan/tnls.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/tnls.f
+cgm.o: ../Source/routines_algencan-2.3.5/sources/algencan/cgm.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/cgm.f
+checkder.o: ../Source/routines_algencan-2.3.5/sources/algencan/checkder.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/checkder.f
+setpoint.o: ../Source/routines_algencan-2.3.5/sources/algencan/setpoint.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT}  ../Source/routines_algencan-2.3.5/sources/algencan/setpoint.f
+tevalus.o: ../Source/routines_algencan-2.3.5/sources/algencan/tevalus.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/tevalus.f
+newtonkkt.o: ../Source/routines_algencan-2.3.5/sources/algencan/newtonkkt.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/newtonkkt.f
+happrox.o: ../Source/routines_algencan-2.3.5/sources/algencan/happrox.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/happrox.f
+backtrack.o: ../Source/routines_algencan-2.3.5/sources/algencan/backtrack.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/backtrack.f
+moresor.o: ../Source/routines_algencan-2.3.5/sources/algencan/moresor.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/moresor.f
+dogleg.o: ../Source/routines_algencan-2.3.5/sources/algencan/dogleg.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/dogleg.f
+extrap.o: ../Source/routines_algencan-2.3.5/sources/algencan/extrap.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/extrap.f
+drand.o: ../Source/routines_algencan-2.3.5/sources/algencan/drand.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/routines_algencan-2.3.5/sources/algencan/drand.f
+uevalus.o: ../Source/routines_algencan-2.3.5/sources/algencan/uevalus.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} -cpp ../Source/routines_algencan-2.3.5/sources/algencan/uevalus.f
+meshQuality.o:	../Source/meshQuality.f
+	${PATHFC}${FC} -c ${FFLAGS} ${OPT} ../Source/meshQuality.f
+
